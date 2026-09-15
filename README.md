@@ -47,7 +47,7 @@ AeroCast features real-time weather monitoring, interactive SVG trend charts, a 
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/vikash-JD/Weather-Forecast.git
+   git clone https://github.com/JD-VIKASH/Weather-Forecast.git
    cd Weather-Forecast
    ```
 
