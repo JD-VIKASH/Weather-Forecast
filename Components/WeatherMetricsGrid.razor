@@ -1,0 +1,161 @@
+@using Weather_Forecast.Models
+
+<div class="metrics-grid">
+    <!-- Card 1: Feels Like -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z" />
+            </svg>
+            <span>Feels Like</span>
+        </div>
+        <div class="metric-value">@Math.Round(Weather?.Main?.FeelsLike ?? 0, 1)@UnitSymbol</div>
+        <div class="metric-subtext">
+            @GetFeelsLikeDescription(Weather?.Main?.Temp ?? 0, Weather?.Main?.FeelsLike ?? 0)
+        </div>
+    </div>
+
+    <!-- Card 2: Humidity -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+            </svg>
+            <span>Humidity</span>
+        </div>
+        <div class="metric-value">@(Weather?.Main?.Humidity ?? 0)%</div>
+        <div class="metric-bar-wrapper">
+            <div class="metric-bar-fill" style="width: @(Weather?.Main?.Humidity ?? 0)%"></div>
+        </div>
+        <div class="metric-subtext">
+            Dew point is ~@CalculateDewPoint(Weather?.Main?.Temp ?? 0, Weather?.Main?.Humidity ?? 0)@UnitSymbol
+        </div>
+    </div>
+
+    <!-- Card 3: Wind & Gusts -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" />
+            </svg>
+            <span>Wind</span>
+        </div>
+        <div class="metric-value">
+            @Math.Round(Weather?.Wind?.Speed ?? 0, 1) <span class="unit-small">m/s</span>
+        </div>
+        <div class="metric-subtext compass-row">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" style="transform: rotate(@(Weather?.Wind?.Deg ?? 0)deg)">
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+            </svg>
+            <span>@GetWindDirection(Weather?.Wind?.Deg ?? 0)</span>
+            @if ((Weather?.Wind?.Gust ?? 0) > 0)
+            {
+                <span class="gust-text">• Gusts @Math.Round(Weather!.Wind!.Gust, 1) m/s</span>
+            }
+        </div>
+    </div>
+
+    <!-- Card 4: Pressure -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 6v6l4 2" />
+            </svg>
+            <span>Pressure</span>
+        </div>
+        <div class="metric-value">
+            @(Weather?.Main?.Pressure ?? 1013) <span class="unit-small">hPa</span>
+        </div>
+        <div class="metric-subtext">
+            @GetPressureStatus(Weather?.Main?.Pressure ?? 1013)
+        </div>
+    </div>
+
+    <!-- Card 5: Visibility -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>Visibility</span>
+        </div>
+        <div class="metric-value">
+            @((Weather?.Visibility ?? 10000) / 1000.0) <span class="unit-small">km</span>
+        </div>
+        <div class="metric-subtext">
+            @((Weather?.Visibility ?? 10000) >= 10000 ? "Clear visibility" : "Reduced visibility")
+        </div>
+    </div>
+
+    <!-- Card 6: Sunrise & Sunset -->
+    <div class="metric-card glass-card">
+        <div class="metric-card-header">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 18a5 5 0 0 0-10 0" />
+                <line x1="12" y1="2" x2="12" y2="9" />
+                <polyline points="4.22 10.22 5.64 11.64" />
+                <line x1="1" y1="18" x2="23" y2="18" />
+            </svg>
+            <span>Sun Schedule</span>
+        </div>
+        <div class="sun-schedule-row">
+            <div class="sun-time-item">
+                <span class="sun-label">Sunrise</span>
+                <span class="sun-time">@FormatUnixTime(Weather?.Sys?.Sunrise ?? 0)</span>
+            </div>
+            <div class="sun-divider">☀️</div>
+            <div class="sun-time-item">
+                <span class="sun-label">Sunset</span>
+                <span class="sun-time">@FormatUnixTime(Weather?.Sys?.Sunset ?? 0)</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public CurrentWeatherResponse? Weather { get; set; }
+    [Parameter] public TemperatureUnit Unit { get; set; } = TemperatureUnit.Celsius;
+
+    private string UnitSymbol => Unit == TemperatureUnit.Celsius ? "°C" : "°F";
+
+    private string GetFeelsLikeDescription(double temp, double feelsLike)
+    {
+        double diff = feelsLike - temp;
+        if (Math.Abs(diff) < 1.0) return "Similar to actual temperature";
+        return diff > 0 ? "Warming effect from humidity/sun" : "Cooler due to wind chill";
+    }
+
+    private string GetWindDirection(int degrees)
+    {
+        string[] dirs = { "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" };
+        int idx = (int)Math.Round((degrees % 360) / 22.5);
+        return dirs[idx % 16];
+    }
+
+    private string GetPressureStatus(int pressure)
+    {
+        if (pressure > 1020) return "High pressure (stable weather)";
+        if (pressure < 1005) return "Low pressure (possible storms)";
+        return "Normal atmospheric pressure";
+    }
+
+    private string FormatUnixTime(long seconds)
+    {
+        if (seconds == 0) return "--:--";
+        var dt = DateTimeOffset.FromUnixTimeSeconds(seconds).LocalDateTime;
+        return dt.ToString("HH:mm");
+    }
+
+    private int CalculateDewPoint(double tempC, int humidity)
+    {
+        // Simple Magnus formula approximation
+        double a = 17.27;
+        double b = 237.7;
+        double alpha = ((a * tempC) / (b + tempC)) + Math.Log(humidity / 100.0);
+        double dewPointC = (b * alpha) / (a - alpha);
+        return (int)Math.Round(Unit == TemperatureUnit.Celsius ? dewPointC : (dewPointC * 9 / 5) + 32);
+    }
+}

@@ -1,0 +1,207 @@
+@using Weather_Forecast.Models
+@using System.Globalization
+
+<div class="weather-chart-container glass-card">
+    <div class="chart-header">
+        <div class="chart-title">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            <h4>Temperature & Rain Forecast Trend</h4>
+        </div>
+        <div class="chart-legend">
+            <span class="legend-item"><span class="legend-dot temp-dot"></span> Temp (@UnitSymbol)</span>
+            <span class="legend-item"><span class="legend-dot pop-dot"></span> Rain Prob (%)</span>
+        </div>
+    </div>
+
+    @if (ForecastItems != null && ForecastItems.Count > 0)
+    {
+        <div class="svg-wrapper">
+            <svg viewBox="0 0 @SvgWidth @SvgHeight" class="forecast-svg" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#ff7e5f" stop-opacity="0.4" />
+                        <stop offset="100%" stop-color="#feb47b" stop-opacity="0.0" />
+                    </linearGradient>
+                    <linearGradient id="rainGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#4facfe" stop-opacity="0.6" />
+                        <stop offset="100%" stop-color="#00f2fe" stop-opacity="0.1" />
+                    </linearGradient>
+                </defs>
+
+                <!-- Grid lines -->
+                <line x1="@MarginLeft" y1="@(MarginTop + ChartHeight * 0.25)" x2="@(SvgWidth - MarginRight)" y2="@(MarginTop + ChartHeight * 0.25)" class="grid-line" />
+                <line x1="@MarginLeft" y1="@(MarginTop + ChartHeight * 0.5)" x2="@(SvgWidth - MarginRight)" y2="@(MarginTop + ChartHeight * 0.5)" class="grid-line" />
+                <line x1="@MarginLeft" y1="@(MarginTop + ChartHeight * 0.75)" x2="@(SvgWidth - MarginRight)" y2="@(MarginTop + ChartHeight * 0.75)" class="grid-line" />
+
+                <!-- Rain probability bars -->
+                @for (int i = 0; i < PointCount; i++)
+                {
+                    var item = VisibleItems[i];
+                    double x = GetX(i);
+                    double barHeight = item.Pop * (ChartHeight * 0.35);
+                    double y = (MarginTop + ChartHeight) - barHeight;
+                    double barWidth = Math.Max(4, StepX * 0.5);
+
+                    <rect x="@F(x - barWidth / 2)"
+                          y="@F(y)"
+                          width="@F(barWidth)"
+                          height="@F(barHeight)"
+                          rx="2"
+                          fill="url(#rainGradient)"
+                          class="rain-bar" />
+                }
+
+                <!-- Temperature Fill Area -->
+                <path d="@AreaPathD" fill="url(#tempGradient)" />
+
+                <!-- Temperature Trend Line -->
+                <path d="@LinePathD" fill="none" stroke="#ff7e5f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="chart-line" />
+
+                <!-- Data Points & Labels -->
+                @for (int i = 0; i < PointCount; i++)
+                {
+                    var item = VisibleItems[i];
+                    double x = GetX(i);
+                    double y = GetY(item.Main?.Temp ?? 0);
+                    DateTime dt = DateTimeOffset.FromUnixTimeSeconds(item.Dt).LocalDateTime;
+                    bool isSelected = selectedIndex == i;
+                    int idx = i;
+
+                    <g class="chart-point-group @(isSelected ? "selected" : "")" @onclick="() => SelectPoint(idx)">
+                        <!-- Touch target line -->
+                        <line x1="@F(x)" y1="@MarginTop" x2="@F(x)" y2="@(SvgHeight - MarginBottom)" class="hover-line" />
+
+                        <!-- Point Circle -->
+                        <circle cx="@F(x)" cy="@F(y)" r="@(isSelected ? 6 : 4)" class="chart-point" />
+
+                        <!-- Temp Label above point -->
+                        @((MarkupString)$"<text x='{F(x)}' y='{F(y - 10)}' text-anchor='middle' class='chart-temp-text'>{Math.Round(item.Main?.Temp ?? 0, 0)}°</text>")
+
+                        <!-- X Axis Time Label -->
+                        @((MarkupString)$"<text x='{F(x)}' y='{F(SvgHeight - MarginBottom + 16)}' text-anchor='middle' class='chart-axis-text'>{dt:HH:mm}</text>")
+
+                        <!-- X Axis Date sub-label for day change -->
+                        @if (i == 0 || dt.Hour == 0 || dt.Hour == 3)
+                        {
+                            @((MarkupString)$"<text x='{F(x)}' y='{F(SvgHeight - MarginBottom + 30)}' text-anchor='middle' class='chart-axis-subtext'>{dt:ddd}</text>")
+                        }
+                    </g>
+                }
+            </svg>
+        </div>
+
+        @if (selectedIndex >= 0 && selectedIndex < VisibleItems.Count)
+        {
+            var sel = VisibleItems[selectedIndex];
+            DateTime selTime = DateTimeOffset.FromUnixTimeSeconds(sel.Dt).LocalDateTime;
+            <div class="chart-tooltip-panel fade-in">
+                <div class="tooltip-time">@selTime.ToString("dddd, MMM d @ HH:mm")</div>
+                <div class="tooltip-grid">
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Temp:</span>
+                        <span class="stat-val highlight">@sel.Main?.Temp.ToString("F1")@UnitSymbol</span>
+                    </div>
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Feels Like:</span>
+                        <span class="stat-val">@sel.Main?.FeelsLike.ToString("F1")@UnitSymbol</span>
+                    </div>
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Rain Chance:</span>
+                        <span class="stat-val pop-val">@(Math.Round(sel.Pop * 100))%</span>
+                    </div>
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Humidity:</span>
+                        <span class="stat-val">@sel.Main?.Humidity%</span>
+                    </div>
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Wind:</span>
+                        <span class="stat-val">@sel.Wind?.Speed.ToString("F1") m/s</span>
+                    </div>
+                    <div class="tooltip-stat">
+                        <span class="stat-label">Condition:</span>
+                        <span class="stat-val capitalize">@sel.Weather?.FirstOrDefault()?.Description</span>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="chart-placeholder">
+            <p>No forecast data available for chart rendering.</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<ForecastItem> ForecastItems { get; set; } = new();
+    [Parameter] public TemperatureUnit Unit { get; set; } = TemperatureUnit.Celsius;
+
+    private int selectedIndex = 0;
+
+    private const int SvgWidth = 800;
+    private const int SvgHeight = 220;
+    private const int MarginTop = 28;
+    private const int MarginBottom = 42;
+    private const int MarginLeft = 30;
+    private const int MarginRight = 30;
+
+    private int ChartWidth => SvgWidth - MarginLeft - MarginRight;
+    private int ChartHeight => SvgHeight - MarginTop - MarginBottom;
+
+    private List<ForecastItem> VisibleItems => ForecastItems.Take(16).ToList();
+    private int PointCount => VisibleItems.Count;
+    private double StepX => PointCount > 1 ? (double)ChartWidth / (PointCount - 1) : ChartWidth;
+
+    private string UnitSymbol => Unit == TemperatureUnit.Celsius ? "°C" : "°F";
+
+    private double MinTemp => VisibleItems.Any() ? VisibleItems.Min(i => i.Main?.Temp ?? 0) - 2 : 0;
+    private double MaxTemp => VisibleItems.Any() ? VisibleItems.Max(i => i.Main?.Temp ?? 0) + 2 : 30;
+    private double TempRange => Math.Max(1.0, MaxTemp - MinTemp);
+
+    private double GetX(int index) => MarginLeft + index * StepX;
+    private double GetY(double temp)
+    {
+        double normalized = (temp - MinTemp) / TempRange;
+        return (MarginTop + ChartHeight) - (normalized * ChartHeight);
+    }
+
+    private string F(double val) => val.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private string LinePathD
+    {
+        get
+        {
+            if (PointCount == 0) return string.Empty;
+            var path = $"M {F(GetX(0))} {F(GetY(VisibleItems[0].Main?.Temp ?? 0))}";
+            for (int i = 1; i < PointCount; i++)
+            {
+                path += $" L {F(GetX(i))} {F(GetY(VisibleItems[i].Main?.Temp ?? 0))}";
+            }
+            return path;
+        }
+    }
+
+    private string AreaPathD
+    {
+        get
+        {
+            if (PointCount == 0) return string.Empty;
+            double baselineY = MarginTop + ChartHeight;
+            var path = $"M {F(GetX(0))} {F(baselineY)} L {F(GetX(0))} {F(GetY(VisibleItems[0].Main?.Temp ?? 0))}";
+            for (int i = 1; i < PointCount; i++)
+            {
+                path += $" L {F(GetX(i))} {F(GetY(VisibleItems[i].Main?.Temp ?? 0))}";
+            }
+            path += $" L {F(GetX(PointCount - 1))} {F(baselineY)} Z";
+            return path;
+        }
+    }
+
+    private void SelectPoint(int index)
+    {
+        selectedIndex = index;
+    }
+}

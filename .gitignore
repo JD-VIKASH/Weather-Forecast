@@ -1,0 +1,27 @@
+## .NET / C#
+bin/
+obj/
+out/
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+## Build / IDE outputs
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+
+## Operating System files
+.DS_Store
+Thumbs.db
+desktop.ini

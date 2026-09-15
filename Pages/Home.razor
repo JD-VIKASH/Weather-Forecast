@@ -1,0 +1,453 @@
+@page "/"
+@inject IWeatherApiService WeatherApi
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JSRuntime
+
+<div class="app-viewport @ThemeWeatherClass">
+    <!-- Weather Background Effects -->
+    <div class="bg-weather-effect">
+        @if (WeatherConditionClass == "rain")
+        {
+            <div class="rain-particles"></div>
+        }
+        else if (WeatherConditionClass == "snow")
+        {
+            <div class="snow-particles"></div>
+        }
+        else if (WeatherConditionClass == "clear")
+        {
+            <div class="sun-glow-effect"></div>
+        }
+    </div>
+
+    <div class="app-container">
+        <!-- Top Navbar & Search Header -->
+        <header class="top-nav glass-card">
+            <div class="brand">
+                <svg class="brand-icon" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z" />
+                    <circle cx="12" cy="5" r="2" fill="currentColor" />
+                </svg>
+                <div class="brand-text">
+                    <h1>AeroCast</h1>
+                    <span class="brand-subtitle">Weather & Forecast</span>
+                </div>
+            </div>
+
+            <!-- Search Box with Autosuggest -->
+            <div class="search-wrapper">
+                <div class="search-input-group">
+                    <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input type="text"
+                           class="search-input"
+                           placeholder="Search city (e.g. London, Tokyo, New York)..."
+                           @bind="searchQuery"
+                           @bind:event="oninput"
+                           @onkeyup="HandleSearchKeyUp"
+                           @onfocus="ShowSuggestions" />
+
+                    @if (isSearching)
+                    {
+                        <span class="spinner-inline"></span>
+                    }
+
+                    <button class="location-btn" @onclick="FetchCurrentLocation" title="Use My Location">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 19 21 12 17 5 21 12 2" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Suggestions / Recent Searches Dropdown -->
+                @if (showDropdown && (searchResults.Count > 0 || recentSearches.Count > 0))
+                {
+                    <div class="search-dropdown glass-card fade-in">
+                        @if (searchResults.Count > 0)
+                        {
+                            <div class="dropdown-header">Matching Locations</div>
+                            @foreach (var item in searchResults)
+                            {
+                                <div class="dropdown-item" @onclick="() => SelectLocation(item.Name)">
+                                    <span class="loc-name">@item.Name</span>
+                                    <span class="loc-sub">@item.State @item.Country</span>
+                                </div>
+                            }
+                        }
+                        else if (recentSearches.Count > 0)
+                        {
+                            <div class="dropdown-header">Recent Searches</div>
+                            @foreach (var recent in recentSearches)
+                            {
+                                <div class="dropdown-item" @onclick="() => SelectLocation(recent)">
+                                    <span class="loc-name">🕒 @recent</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Controls (Unit Toggle & Settings) -->
+            <div class="nav-controls">
+                <div class="unit-toggle" title="Toggle Temperature Unit">
+                    <button class="unit-btn @(currentUnit == TemperatureUnit.Celsius ? "active" : "")"
+                            @onclick="() => SetUnit(TemperatureUnit.Celsius)">°C</button>
+                    <button class="unit-btn @(currentUnit == TemperatureUnit.Fahrenheit ? "active" : "")"
+                            @onclick="() => SetUnit(TemperatureUnit.Fahrenheit)">°F</button>
+                </div>
+
+                <button class="btn-icon settings-btn @(!string.IsNullOrEmpty(apiKey) ? "has-key" : "")"
+                        @onclick="() => isApiModalOpen = true"
+                        title="API Key & Settings">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Mode Indicator Banner -->
+        <div class="mode-badge-container">
+            @if (string.IsNullOrEmpty(apiKey))
+            {
+                <div class="mode-badge badge-demo" @onclick="() => isApiModalOpen = true">
+                    <span class="badge-pulse"></span>
+                    <span><strong>Demo Mode:</strong> Interactive Mock Data engine. <span class="badge-action">Click to add OpenWeatherMap API Key</span></span>
+                </div>
+            }
+            else
+            {
+                <div class="mode-badge badge-live" @onclick="() => isApiModalOpen = true">
+                    <span class="badge-dot"></span>
+                    <span><strong>Live REST API:</strong> OpenWeatherMap Connected</span>
+                </div>
+            }
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="loading-container glass-card">
+                <div class="loading-spinner"></div>
+                <p>Fetching weather forecast for <strong>@currentCity</strong>...</p>
+            </div>
+        }
+        else if (errorMessage != null)
+        {
+            <div class="error-container glass-card">
+                <div class="error-icon">⚠️</div>
+                <h3>Unable to Load Weather</h3>
+                <p>@errorMessage</p>
+                <button class="btn btn-primary" @onclick="LoadData">Try Again</button>
+            </div>
+        }
+        else if (currentWeather != null)
+        {
+            <!-- Main Hero Weather Display -->
+            <section class="hero-weather-card glass-card fade-in">
+                <div class="hero-main-info">
+                    <div class="hero-header-row">
+                        <div class="location-details">
+                            <h2 class="city-name">@currentWeather.Name</h2>
+                            <span class="country-tag">@currentWeather.Sys?.Country</span>
+                            <span class="time-stamp">@GetFormattedLocalTime()</span>
+                        </div>
+                        <div class="weather-condition-badge capitalize">
+                            @currentWeather.Weather?.FirstOrDefault()?.Description
+                        </div>
+                    </div>
+
+                    <div class="hero-temp-row">
+                        <div class="hero-temp-display">
+                            <span class="temp-number">@Math.Round(currentWeather.Main?.Temp ?? 0, 0)</span>
+                            <span class="temp-degree">@UnitSymbol</span>
+                        </div>
+
+                        <div class="hero-icon-wrapper">
+                            @GetHeroWeatherIcon(currentWeather.Weather?.FirstOrDefault()?.Main ?? "Clear")
+                        </div>
+                    </div>
+
+                    <div class="hero-sub-stats">
+                        <span class="stat-pill">High: <strong>@Math.Round(currentWeather.Main?.TempMax ?? 0, 0)@UnitSymbol</strong></span>
+                        <span class="stat-pill">Low: <strong>@Math.Round(currentWeather.Main?.TempMin ?? 0, 0)@UnitSymbol</strong></span>
+                        <span class="stat-pill">Feels Like: <strong>@Math.Round(currentWeather.Main?.FeelsLike ?? 0, 0)@UnitSymbol</strong></span>
+                        <span class="stat-pill">Humidity: <strong>@(currentWeather.Main?.Humidity)%</strong></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5-Day Summary Cards Header -->
+            @if (dailySummaries.Count > 0)
+            {
+                <section class="daily-forecast-section">
+                    <h3 class="section-title">5-Day Weather Outlook</h3>
+                    <div class="daily-cards-grid">
+                        @for (int i = 0; i < dailySummaries.Count; i++)
+                        {
+                            var day = dailySummaries[i];
+                            bool isSelected = selectedDayIndex == i;
+
+                            <div class="daily-card glass-card @(isSelected ? "selected" : "")" @onclick="() => SelectDay(i)">
+                                <div class="daily-day">@day.DayOfWeek</div>
+                                <div class="daily-icon-box">
+                                    @GetDailyIcon(day.WeatherMain)
+                                </div>
+                                <div class="daily-temp-range">
+                                    <span class="max-t">@Math.Round(day.MaxTemp, 0)°</span>
+                                    <span class="min-t">@Math.Round(day.MinTemp, 0)°</span>
+                                </div>
+                                <div class="daily-desc capitalize">@day.WeatherMain</div>
+
+                                @if (day.MaxPrecipitationProb > 0.1)
+                                {
+                                    <div class="daily-rain-pill">
+                                        💧 @Math.Round(day.MaxPrecipitationProb * 100)%
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+
+            <!-- SVG Temperature & Precipitation Curve Chart -->
+            <WeatherChart ForecastItems="@ActiveForecastItems" Unit="@currentUnit" />
+
+            <!-- Hourly / 3-Hour Breakdown Slider -->
+            <HourlyForecastList Items="@ActiveForecastItems" Unit="@currentUnit" />
+
+            <!-- Environmental Metrics Grid -->
+            <WeatherMetricsGrid Weather="@currentWeather" Unit="@currentUnit" />
+        }
+    </div>
+
+    <!-- API Key Settings Modal -->
+    <ApiKeyModal @bind-IsOpen="isApiModalOpen"
+                 CurrentApiKey="@apiKey"
+                 OnApiKeySaved="HandleApiKeySaved" />
+</div>
+
+@code {
+    private string currentCity = "London";
+    private string searchQuery = "";
+    private string apiKey = "";
+    private TemperatureUnit currentUnit = TemperatureUnit.Celsius;
+
+    private CurrentWeatherResponse? currentWeather;
+    private ForecastResponse? forecastResponse;
+    private List<DailyForecastSummary> dailySummaries = new();
+    private List<DirectGeoLocation> searchResults = new();
+    private List<string> recentSearches = new();
+
+    private bool isLoading = true;
+    private bool isSearching = false;
+    private bool showDropdown = false;
+    private bool isApiModalOpen = false;
+    private string? errorMessage = null;
+    private int selectedDayIndex = 0;
+
+    private string UnitSymbol => currentUnit == TemperatureUnit.Celsius ? "°C" : "°F";
+
+    private string WeatherConditionClass => currentWeather?.Weather?.FirstOrDefault()?.Main.ToLowerInvariant() switch
+    {
+        "rain" or "drizzle" or "thunderstorm" => "rain",
+        "snow" => "snow",
+        "clear" => "clear",
+        _ => "cloudy"
+    };
+
+    private string ThemeWeatherClass => $"theme-{WeatherConditionClass}";
+
+    private List<ForecastItem> ActiveForecastItems
+    {
+        get
+        {
+            if (dailySummaries.Count > 0 && selectedDayIndex >= 0 && selectedDayIndex < dailySummaries.Count)
+            {
+                return dailySummaries[selectedDayIndex].HourlyItems;
+            }
+            return forecastResponse?.List ?? new List<ForecastItem>();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        apiKey = await LocalStorage.GetItemAsync<string>("openweathermap_apikey") ?? "";
+        var savedUnit = await LocalStorage.GetItemAsync<string>("weather_unit");
+        if (savedUnit == "Fahrenheit") currentUnit = TemperatureUnit.Fahrenheit;
+
+        recentSearches = await LocalStorage.GetItemAsync<List<string>>("recent_searches") ?? new List<string> { "London", "Tokyo", "New York" };
+        currentCity = recentSearches.FirstOrDefault() ?? "London";
+
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            currentWeather = await WeatherApi.GetCurrentWeatherAsync(currentCity, currentUnit, apiKey);
+            forecastResponse = await WeatherApi.Get5DayForecastAsync(currentCity, currentUnit, apiKey);
+
+            if (forecastResponse != null)
+            {
+                dailySummaries = WeatherApi.ProcessDailySummaries(forecastResponse, currentUnit);
+                selectedDayIndex = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(searchQuery))
+        {
+            await SelectLocation(searchQuery.Trim());
+            return;
+        }
+
+        if (searchQuery.Length >= 2)
+        {
+            isSearching = true;
+            showDropdown = true;
+            searchResults = await WeatherApi.SearchLocationsAsync(searchQuery, apiKey);
+            isSearching = false;
+        }
+        else
+        {
+            searchResults.Clear();
+            showDropdown = searchQuery.Length > 0;
+        }
+    }
+
+    private void ShowSuggestions()
+    {
+        showDropdown = true;
+    }
+
+    private async Task SelectLocation(string city)
+    {
+        currentCity = city;
+        searchQuery = "";
+        showDropdown = false;
+        searchResults.Clear();
+
+        if (!recentSearches.Contains(city, StringComparer.OrdinalIgnoreCase))
+        {
+            recentSearches.Insert(0, city);
+            if (recentSearches.Count > 5) recentSearches = recentSearches.Take(5).ToList();
+            await LocalStorage.SetItemAsync("recent_searches", recentSearches);
+        }
+
+        await LoadData();
+    }
+
+    private async Task FetchCurrentLocation()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+            // Default to Paris coords for browser fallback demo
+            currentWeather = await WeatherApi.GetCurrentWeatherByCoordsAsync(48.8566, 2.3522, currentUnit, apiKey);
+            forecastResponse = await WeatherApi.Get5DayForecastByCoordsAsync(48.8566, 2.3522, currentUnit, apiKey);
+
+            if (currentWeather != null)
+            {
+                currentCity = currentWeather.Name;
+            }
+
+            if (forecastResponse != null)
+            {
+                dailySummaries = WeatherApi.ProcessDailySummaries(forecastResponse, currentUnit);
+                selectedDayIndex = 0;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to fetch geolocation weather: " + ex.Message;
+        }
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SetUnit(TemperatureUnit unit)
+    {
+        if (currentUnit == unit) return;
+        currentUnit = unit;
+        await LocalStorage.SetItemAsync("weather_unit", unit.ToString());
+        await LoadData();
+    }
+
+    private async Task HandleApiKeySaved(string newApiKey)
+    {
+        apiKey = newApiKey;
+        await LocalStorage.SetItemAsync("openweathermap_apikey", apiKey);
+        await LoadData();
+    }
+
+    private void SelectDay(int index)
+    {
+        selectedDayIndex = index;
+    }
+
+    private string GetFormattedLocalTime()
+    {
+        return DateTime.Now.ToString("dddd, MMM d • HH:mm");
+    }
+
+    private RenderFragment GetHeroWeatherIcon(string condition) => builder =>
+    {
+        switch (condition.ToLowerInvariant())
+        {
+            case "clear":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' class='hero-svg hero-sun' width='80' height='80' fill='none' stroke='#ffb347' stroke-width='1.5'><circle cx='12' cy='12' r='5'/><line x1='12' y1='1' x2='12' y2='3'/><line x1='12' y1='21' x2='12' y2='23'/><line x1='4.22' y1='4.22' x2='5.64' y2='5.64'/><line x1='18.36' y1='18.36' x2='19.78' y2='19.78'/><line x1='1' y1='12' x2='3' y2='12'/><line x1='21' y1='12' x2='23' y2='12'/><line x1='4.22' y1='19.78' x2='5.64' y2='18.36'/><line x1='18.36' y1='5.64' x2='19.78' y2='4.22'/></svg>");
+                break;
+            case "rain":
+            case "drizzle":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' class='hero-svg hero-rain' width='80' height='80' fill='none' stroke='#4facfe' stroke-width='1.5'><path d='M16 13v8M8 13v8M12 15v8'/><path d='M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25'/></svg>");
+                break;
+            case "thunderstorm":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' class='hero-svg hero-thunder' width='80' height='80' fill='none' stroke='#f093fb' stroke-width='1.5'><path d='M19 16.9A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25'/><polyline points='13 11 9 17 15 17 11 23'/></svg>");
+                break;
+            case "snow":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' class='hero-svg hero-snow' width='80' height='80' fill='none' stroke='#e0c3fc' stroke-width='1.5'><path d='M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25'/><line x1='8' y1='16' x2='8.01' y2='16'/><line x1='12' y1='18' x2='12.01' y2='18'/><line x1='16' y1='16' x2='16.01' y2='16'/></svg>");
+                break;
+            default:
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' class='hero-svg hero-cloud' width='80' height='80' fill='none' stroke='#a1c4fd' stroke-width='1.5'><path d='M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z'/></svg>");
+                break;
+        }
+    };
+
+    private RenderFragment GetDailyIcon(string condition) => builder =>
+    {
+        switch (condition.ToLowerInvariant())
+        {
+            case "clear":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' width='28' height='28' fill='none' stroke='#ffb347' stroke-width='2'><circle cx='12' cy='12' r='5'/><line x1='12' y1='1' x2='12' y2='3'/><line x1='12' y1='21' x2='12' y2='23'/></svg>");
+                break;
+            case "rain":
+            case "drizzle":
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' width='28' height='28' fill='none' stroke='#4facfe' stroke-width='2'><path d='M16 13v6M8 13v6M12 15v6'/><path d='M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25'/></svg>");
+                break;
+            default:
+                builder.AddMarkupContent(0, @"<svg viewBox='0 0 24 24' width='28' height='28' fill='none' stroke='#a1c4fd' stroke-width='2'><path d='M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z'/></svg>");
+                break;
+        }
+    };
+}

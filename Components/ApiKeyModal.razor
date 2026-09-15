@@ -1,0 +1,140 @@
+@inject IWeatherApiService WeatherApiService
+@inject ILocalStorageService LocalStorage
+
+@if (IsOpen)
+{
+    <div class="modal-backdrop fade-in" @onclick="Close">
+        <div class="modal-content glass-card slide-up" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <div class="header-title">
+                    <svg class="header-icon" viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
+                        <path d="M21 2l-2 2m-2-2l2 2M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <h3>OpenWeatherMap API Settings</h3>
+                </div>
+                <button class="btn-icon close-btn" @onclick="Close" title="Close">×</button>
+            </div>
+
+            <div class="modal-body">
+                <p class="modal-desc">
+                    Enter your <strong>OpenWeatherMap API Key</strong> to fetch live REST API weather data.
+                    Or click <strong>Use Demo Mode</strong> below to enjoy full interactive weather features with pre-configured mock data!
+                </p>
+
+                <div class="form-group">
+                    <label for="apiKeyInput">API Key (Optional)</label>
+                    <div class="input-with-action">
+                        <input id="apiKeyInput"
+                               type="password"
+                               class="form-control"
+                               placeholder="e.g. 4a8e3d8f..."
+                               @bind="tempApiKey"
+                               @bind:event="oninput" />
+                        @if (!string.IsNullOrEmpty(tempApiKey))
+                        {
+                            <button class="btn btn-outline" @onclick="TestApiKey" disabled="@isTesting">
+                                @if (isTesting)
+                                {
+                                    <span class="spinner-small"></span>
+                                    <span>Verifying...</span>
+                                }
+                                else
+                                {
+                                    <span>Test Key</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (testMessage != null)
+                {
+                    <div class="alert @(testSuccess ? "alert-success" : "alert-error")">
+                        @(testSuccess ? "✓ " : "✕ ") @testMessage
+                    </div>
+                }
+
+                <div class="api-info-box">
+                    <div class="info-item">
+                        <strong>Get a Free Key:</strong> Register at 
+                        <a href="https://openweathermap.org/api" target="_blank" rel="noopener noreferrer">openweathermap.org/api</a>.
+                    </div>
+                    <div class="info-item">
+                        <strong>Free Tier Includes:</strong> 1,000 API calls/day, 5-day / 3-hour forecast, current weather & geocoding.
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                @if (!string.IsNullOrEmpty(CurrentApiKey))
+                {
+                    <button class="btn btn-danger-soft" @onclick="ClearKey">Clear Key</button>
+                }
+                <button class="btn btn-secondary" @onclick="UseDemoMode">Use Demo Mode</button>
+                <button class="btn btn-primary" @onclick="SaveKey">Save & Refresh</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public string CurrentApiKey { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> OnApiKeySaved { get; set; }
+
+    private string tempApiKey = string.Empty;
+    private bool isTesting = false;
+    private bool testSuccess = false;
+    private string? testMessage = null;
+
+    protected override void OnParametersSet()
+    {
+        tempApiKey = CurrentApiKey;
+        testMessage = null;
+    }
+
+    private async Task TestApiKey()
+    {
+        if (string.IsNullOrWhiteSpace(tempApiKey))
+            return;
+
+        isTesting = true;
+        testMessage = null;
+        StateHasChanged();
+
+        bool isValid = await WeatherApiService.ValidateApiKeyAsync(tempApiKey.Trim());
+        isTesting = false;
+        testSuccess = isValid;
+        testMessage = isValid ? "API key verified successfully! Connected to OpenWeatherMap." : "Invalid API key or network error. Please double-check your key.";
+        StateHasChanged();
+    }
+
+    private async Task SaveKey()
+    {
+        string keyToSave = tempApiKey.Trim();
+        await OnApiKeySaved.InvokeAsync(keyToSave);
+        await Close();
+    }
+
+    private async Task UseDemoMode()
+    {
+        tempApiKey = string.Empty;
+        await OnApiKeySaved.InvokeAsync(string.Empty);
+        await Close();
+    }
+
+    private async Task ClearKey()
+    {
+        tempApiKey = string.Empty;
+        await OnApiKeySaved.InvokeAsync(string.Empty);
+        await Close();
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
